@@ -94,7 +94,8 @@ class KMRotate(Resource):
             elif rad_f < device["min_rad"]:
                 rad_f = device["min_rad"]
             diff = motor_info[id]["position"] - dev_rad_opt[id]
-            if (diff > 0.1 or diff < -0.1):
+            velocity = motor_info[id]["velocity"]
+            if (velocity >= 0.01 or velocity <= -0.01):
                 abort(403)
             dev_rad_opt[id] = rad_f
             dev.move_to_pos(rad_f)
@@ -243,6 +244,11 @@ class KMMotionPatternPlay(Resource):
         #TODO 再生処理
         return {"result" : "ok"}
 
+class KMRegistoringMotionPattern(Resource):
+    def get(self):
+        global motion_pattern
+        return motion_pattern
+
 class KMMotionAdd(Resource):
     def get(self, id, index, rad, speed):
         global motion_pattern
@@ -252,8 +258,9 @@ class KMMotionAdd(Resource):
             index = int(index)
             rad = float(rad)
             speed = float(speed)
-            motion_pattern[index] = {
-                "id" : id,
+            if index not in motion_pattern:
+                motion_pattern[index] = {}
+            motion_pattern[index][id] = {
                 "rad" : rad,
                 "speed" : speed
             }
@@ -301,6 +308,8 @@ api.add_resource(KMMotionPatternInit, '/api/motion_pattern/init')
 api.add_resource(KMMotionPatternSave, '/api/motion_pattern/save/<string:pattern_name>')
 ## 登録中のモーションパターン再生
 api.add_resource(KMMotionPatternPlay, '/api/motion_pattern/play')
+## 登録中のモーションパターンを取得
+api.add_resource(KMRegistoringMotionPattern, '/api/motion_pattern/info')
 ## モーション登録
 api.add_resource(KMMotionAdd, '/api/motion/<string:id>/index/<string:index>/rad/<string:rad>/speed/<string:speed>')
 ## モーション登録削除
@@ -315,4 +324,4 @@ if __name__ == "__main__":
     th =threading.Thread(target=fetch_motor_info)
     th.start()
     # サーバ起動
-    app.run(host="0.0.0.0", port=10080)
+    app.run(host="0.0.0.0", port=8080)
