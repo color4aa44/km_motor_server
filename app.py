@@ -22,6 +22,16 @@ app = Flask(__name__)
 
 socket_io = SocketIO(app, async_mode=async_mode)
 
+def connection_motor(key):
+    device = device_info.devices[key]
+    connection = blecontroller.BLEController(device["mac"])
+    connection.enable_action()
+    connection.enable_continual_imu_measurement()
+    connection.stop_motor()
+    connection.set_speed(device["speed"])
+    connection.move_to_pos(device["ini_rad"])
+    return connection
+
 def fetch_motor():
     global connections
     while True:
@@ -29,14 +39,7 @@ def fetch_motor():
         for key, connection in connections.items():
             try:
                 if connection == None:
-                    connection = blecontroller.BLEController(device_info.devices[key]["mac"])
-                    connection.enable_continual_imu_measurement()
-                    device = device_info.devices[key]
-                    connection.enable_action()
-                    connection.enable_continual_imu_measurement()
-                    connection.stop_motor()
-                    connection.set_speed(device["speed"])
-                    connection.move_to_pos(device["ini_rad"])
+                    connection = connection_motor(key)
                     connections[key] = connection
                     time.sleep(1)
                 motor_info[key] = connection.read_motor_measurement()
@@ -49,12 +52,14 @@ def fetch_motor():
         time.sleep(1)
 
 thread = None
+#thread = socket_io.start_background_task(target=fetch_motor)
 
 @socket_io.on('enable_fetch_motor', namespace='/motor')
 def enable_fetch_motor():
     global thread
     if thread == None:
         thread = socket_io.start_background_task(target=fetch_motor)
+    socket_io.emit("enable_controller", {})
 
 @socket_io.on('connection', namespace='/motor')
 def _connection(message):
@@ -65,21 +70,30 @@ def _connection(message):
     if message["id"] not in device_info.devices:
         print("err2")
         return
-    device = device_info.devices[message["id"]]
     try:
-        connection = blecontroller.BLEController(device["mac"])
-        connection.enable_action()
-        connection.enable_continual_imu_measurement()
-        connection.stop_motor()
-        connection.set_speed(device["speed"])
-        connection.move_to_pos(device["ini_rad"])
-        connections[message["id"]] = connection
+        key = message["id"]
+        connections[key] = connection_motor(key)
     except bluepy.btle.BTLEDisconnectError as e:
         connections[message["id"]] = None
         return
     except Exception as e:
         print(e)
         return
+
+@socket_io.on('set_start_pos', namespace='/motor')
+def set_start_pos(message):
+    global connections
+    for key, connection in connections.items():
+        try:
+            if connection == None:
+                connection = connection_motor(key)
+                connections[key] = connection
+                time.sleep(1)
+            connection.move_to_pos(device_info.devices[key]["ini_rad"])
+        except bluepy.btle.BTLEDisconnectError as e:
+            connections[key] = None
+        except Exception as e:
+            print(e)
 
 #for key in device_info.devices:
 #    _connection({"id" : key})
