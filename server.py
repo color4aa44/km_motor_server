@@ -10,6 +10,7 @@ import subprocess
 
 from flask import Flask, request, abort, jsonify
 from flask_restful import Api, Resource, url_for
+import werkzeug
 import bluepy
 from bluepy.btle import Scanner
 from pykeigan import blecontroller
@@ -42,6 +43,8 @@ try:
 except Exception as e:
     print(e)
     motion_patterns = {}
+
+
 
 # 周囲にあるモーターのデバイス情報を読み込む
 class KMScan(Resource):
@@ -101,6 +104,9 @@ class KMRotate(Resource):
         except bluepy.btle.BTLEDisconnectError as e:
             print(e)
             abort(500)
+        except werkzeug.exceptions.Forbidden as e:
+            print(e)
+            abort(403)
         except Exception as e:
             print(e)
             abort(500)
