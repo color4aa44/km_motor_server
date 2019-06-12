@@ -10,6 +10,7 @@ import subprocess
 
 from flask import Flask, request, abort, jsonify
 from flask_restful import Api, Resource, url_for
+from flask_cors import CORS
 import werkzeug
 import bluepy
 from bluepy.btle import Scanner
@@ -19,15 +20,16 @@ from device_info import devices
 
 app = Flask(__name__)
 api = Api(app)
+CORS(app)
 
 # モータ接続dict初期化
 dev_list = {}
 for key in devices:
     dev_list[key] = None
 
-dev_rad_opt = {}
+prev_rads = {}
 for key in devices:
-    dev_rad_opt[key] = None
+    prev_rads[key] = None
 
 # モータ−情報初期化
 motor_info = {}
@@ -38,13 +40,13 @@ motion_patterns = {}
 # モーションパターンファイル読込
 motion_pattern_paths = os.path.dirname(os.path.abspath(__file__)) + "/motion_patterns.json" 
 try:
+    print("load motion petterns")
     with open(motion_pattern_paths) as f:
         motion_patterns = json.load(f)
 except Exception as e:
     print(e)
     motion_patterns = {}
-
-
+    subprocess.run("echo '{}' > {}".format(json.dumps(motion_patterns), motion_pattern_paths), shell=True)
 
 # 周囲にあるモーターのデバイス情報を読み込む
 class KMScan(Resource):
@@ -75,30 +77,44 @@ class KMInit(Resource):
             abort(500)
         return {"result" : "ok"}
 
-# モーターを回転させる
-class KMRotate(Resource):
+class KMMovePosResource(Resource):
+    def rotate(self, id, rad, speed):
+        device = devices[id]
+        dev = dev_list[id]
+        prev_rad = prev_rads[id]
+        if dev == None:
+            return False
+        if speed == None:
+            speed = devices[id]["speed"]
+        rad_f = float(rad)
+        if rad_f > device["max_rad"]:
+            rad_f = device["max_rad"]
+        elif rad_f < device["min_rad"]:
+            rad_f = device["min_rad"]
+        def move():
+            dev.set_speed(speed)
+            dev.move_to_pos(rad_f)
+            prev_rads[id] = rad_f
+        velocity = motor_info[id]["velocity"]
+        if (velocity <= 0.01 or velocity >= -0.01):
+            move()
+            return True
+        elif (velocity <= -0.01 and prev_rad - rad_f < 0): 
+            move()
+            return True
+        elif (velocity >= 0.01 and rad_f - prev_rad > 0):
+            move()
+            return True
+        return False
+
+class KMRotate(KMMovePosResource):
     def get(self, id, rad):
         global dev_list
-        global dev_rad_opt
-        print(dev_list)
         if id not in dev_list:
             abort(404)
-        dev = dev_list[id]
-        device = devices[id]
-        if dev == None:
-            abort(403)
         try:
-            rad_f = float(rad)
-            if rad_f > device["max_rad"]:
-                rad_f = device["max_rad"]
-            elif rad_f < device["min_rad"]:
-                rad_f = device["min_rad"]
-            diff = motor_info[id]["position"] - dev_rad_opt[id]
-            velocity = motor_info[id]["velocity"]
-            if (velocity >= 0.01 or velocity <= -0.01):
+            if not super().rotate(id, rad, None):
                 abort(403)
-            dev_rad_opt[id] = rad_f
-            dev.move_to_pos(rad_f)
         except ValueError as e:
             print(e)
             abort(400)
@@ -112,6 +128,15 @@ class KMRotate(Resource):
             print(e)
             abort(500)
         return {"result" : "ok"}
+
+class KMRotateInitPos(KMMovePosResource):
+    def get(self):
+        try:
+            for key, device in devices.items():
+                super().rotate(key, device["ini_rad"], None)
+        except bluepy.btle.BTLEDisconnectError as e:
+            print(e)
+            abort(500)
 
 class KMFetchMotorInfo(Resource):
     def get(self):
@@ -134,7 +159,6 @@ def connection(id):
 
 def fetch_motor_info():
     global dev_list
-    global dev_rad_opt
     global motor_info
     while True:
         for key, dev in dev_list.items():
@@ -146,7 +170,6 @@ def fetch_motor_info():
                     time.sleep(2)
                     motor_info[key] = dev.read_motor_measurement()
                     motor_info[key].update(dev.read_imu_measurement())
-                    dev_rad_opt[key] = motor_info[key]["position"]
                     print("{} has been connected".format(key))
                 else:
                     motor_info[key] = dev.read_motor_measurement()
@@ -201,6 +224,9 @@ api.add_resource(KMInit, '/api/init/<string:id>')
 ##    404: 指定したIDを持つモーターが存在しない
 ##    500: その他サーバーエラー
 api.add_resource(KMRotate, '/api/rotate/<string:id>/rad/<string:rad>')
+
+## モーターの位置を初期位置に戻す
+api.add_resource(KMRotateInitPos, '/api/rotate/init')
 ## モーター情報取得
 ## path: /api/fetch
 ## method: GET
@@ -208,7 +234,7 @@ api.add_resource(KMRotate, '/api/rotate/<string:id>/rad/<string:rad>')
 ##  {
 ##    "motor1": {                                   // モーターID
 ##      "position": -1.4906458854675293,            // モーターの角度(rad)
-##      "velocity": 0.0036211530677974224,          // ベロシティ（よくわかっていないです）
+##      "velocity": 0.0036211530677974224,          // モーターの速度
 ##      "torque": 0.013509166426956654,             // トルクの強さ
 ##      "received_unix_time": 1559976978.0912964,   // 取得時間(UNIX Time)
 ##      "accel_x": 0.0017090365306558428,           // 加速度x
@@ -234,10 +260,9 @@ class KMMotionPatternSave(Resource):
         global motion_pattern
         global motion_patterns
         global motion_pattern_paths
-        index = len(motion_patterns)
-        motion_patterns[index] = motion_pattern
-        subprocess.run("echo {} >> {}".format(json.dumps(motion_patterns), motion_pattern_paths), shell=True)
-        return {"result" : "ok", "pattern_id" : index}
+        motion_patterns[pattern_name] = motion_pattern
+        subprocess.run("echo '{}' > {}".format(json.dumps(motion_patterns), motion_pattern_paths), shell=True)
+        return {"result" : "ok", "pattern_id" : pattern_name}
 
 class KMMotionPatternPlay(Resource):
     def get(self):
@@ -249,21 +274,62 @@ class KMRegistoringMotionPattern(Resource):
         global motion_pattern
         return motion_pattern
 
-class KMMotionAdd(Resource):
+class KMMotionResource(Resource):
+    def setPos(self, id, index, rad, speed):
+        index = int(index)
+        rad = float(rad)
+        speed = float(speed)
+        if index not in motion_pattern:
+            motion_pattern[index] = {}
+        motion_pattern[index][id] = {
+            "rad" : rad,
+            "speed" : speed
+        }
+
+class KMMotionAdd(KMMotionResource):
     def get(self, id, index, rad, speed):
         global motion_pattern
         if id not in dev_list:
             abort(404)
         try:
-            index = int(index)
-            rad = float(rad)
-            speed = float(speed)
-            if index not in motion_pattern:
-                motion_pattern[index] = {}
-            motion_pattern[index][id] = {
-                "rad" : rad,
-                "speed" : speed
-            }
+            super().setPos(id, index, rad, speed)
+        except ValueError as e:
+            print(e)
+            abort(400)
+        except Exception as e:
+            print(e)
+            abort(400)
+        return {"result" : "ok"}
+
+class KMMotionAddCurrentPos(KMMotionResource):
+    def get(self, index, speed):
+        global dev_list
+        global motor_info
+        try:
+            for key, dev in dev_list.items():
+                if key not in motor_info:
+                    continue
+                rad = motor_info[key]["position"]
+                super().setPos(key, index, rad, speed)
+        except ValueError as e:
+            print(e)
+            abort(400)
+        except Exception as e:
+            print(e)
+            abort(400)
+        return {"result" : "ok"}
+                
+class KMMotionAddCurrentPosDefaultSpeed(KMMotionResource):
+    def get(self, index):
+        global dev_list
+        global motor_info
+        try:
+            for key, dev in dev_list.items():
+                if key not in motor_info:
+                    continue
+                rad = motor_info[key]["position"]
+                speed = devices[key]["speed"]
+                super().setPos(key, index, rad, speed)
         except ValueError as e:
             print(e)
             abort(400)
@@ -285,20 +351,33 @@ class KMMotionPatterns(Resource):
         global motion_patterns
         return motion_patterns
 
-class KMMotionPattern(Resource):
+class KMMotionPattern(KMMovePosResource):
     def get(self, pattern_id):
         global motion_patterns
         if pattern_id not in motion_patterns:
             abort(404)
-        # TODO パターン再生
-        return 
+        motion_pattern = motion_patterns[pattern_id]
+        for motion in motion_pattern.values():
+            complete = {}
+            def allComplete(comp):
+                for flag in comp.values():
+                    if not flag:
+                        return False
+                return True
+            for key in dev_list:
+                complete[key] = False
+            while not allComplete(complete):
+                for key, value in motion.items():
+                    if not complete[key]:
+                        complete[key] = super().rotate(key, value["rad"], value["speed"])
+            time.sleep(5)
 
     def delete(self, pattern_id):
         global motion_patterns
         if pattern_id not in motion_patterns:
             abort(404)
         motion_patterns.pop(pattern_id)
-        subprocess.run("echo {} >> {}".format(json.dumps(motion_patterns), motion_pattern_paths), shell=True)
+        subprocess.run("echo '{}' > {}".format(json.dumps(motion_patterns), motion_pattern_paths), shell=True)
         return
 
 # モーションパターン
@@ -312,6 +391,9 @@ api.add_resource(KMMotionPatternPlay, '/api/motion_pattern/play')
 api.add_resource(KMRegistoringMotionPattern, '/api/motion_pattern/info')
 ## モーション登録
 api.add_resource(KMMotionAdd, '/api/motion/<string:id>/index/<string:index>/rad/<string:rad>/speed/<string:speed>')
+## モーション登録（現在のモーターの位置を使用）
+api.add_resource(KMMotionAddCurrentPos, '/api/motion/<string:index>/speed/<string:speed>')
+api.add_resource(KMMotionAddCurrentPosDefaultSpeed, '/api/motion/<string:index>')
 ## モーション登録削除
 api.add_resource(KMMotionDelelte, '/api/motion/<string:id>')
 ## モーションパターン一覧表示

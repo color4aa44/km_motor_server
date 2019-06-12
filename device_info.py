@@ -18,7 +18,7 @@ devices = {
         "serial" : "7WSC#E82",
         "mac" : "c4:88:14:f4:e8:ad",
         "speed" : 0.8,
-        "ini_rad" : 0.82,
+        "ini_rad" : 0.00,
         "min_rad" : 0.00,
         "max_rad" : 1.65,
         "remarks" : "joint"
@@ -29,8 +29,8 @@ devices = {
         "mac" : "cc:57:89:91:4e:5c",
         "speed" : 0.6,
         "ini_rad" : 0.0,
-        "min_rad" : 0.0,
-        "max_rad" : 6.28,
+        "min_rad" : -99.9,
+        "max_rad" : 99.9,
         "remarks" : "tip"
     }
 }
