@@ -71,11 +71,7 @@ class KMInit(Resource):
             abort(404)
         try:
             dev = dev_list[id]
-<<<<<<< HEAD
             dev.preset_position(devices[id]["ini_rad"])
-=======
-            dev.preset_position(0)
->>>>>>> 7de865543fd39c02865200bcd5cc33d89c504090
         except Exception as e:
             print(e)
             abort(500)
@@ -110,7 +106,6 @@ class KMMovePosResource(Resource):
             move()
             return True
         return False
-<<<<<<< HEAD
 
 class KMRotate(KMMovePosResource):
     def get(self, id, rad):
@@ -136,35 +131,19 @@ class KMRotate(KMMovePosResource):
 
 class KMRotateSpeed(KMMovePosResource):
     def get(self, id, rad, speed):
-=======
-
-class KMRotate(KMMovePosResource):
-    def get(self, id, rad):
->>>>>>> 7de865543fd39c02865200bcd5cc33d89c504090
         global dev_list
         if id not in dev_list:
             abort(404)
         try:
-<<<<<<< HEAD
             speed = float(speed)
             dev = dev_list[id]
             dev.set_speed(speed)
-=======
-            if not super().rotate(id, rad, None):
-                abort(403)
->>>>>>> 7de865543fd39c02865200bcd5cc33d89c504090
         except ValueError as e:
             print(e)
             abort(400)
         except bluepy.btle.BTLEDisconnectError as e:
             print(e)
             abort(500)
-<<<<<<< HEAD
-=======
-        except werkzeug.exceptions.Forbidden as e:
-            print(e)
-            abort(403)
->>>>>>> 7de865543fd39c02865200bcd5cc33d89c504090
         except Exception as e:
             print(e)
             abort(500)
@@ -186,10 +165,7 @@ class KMFetchMotorInfo(Resource):
 
 def connection(id):
     global dev_list
-<<<<<<< HEAD
     print("{} connecting...".format(id))
-=======
->>>>>>> 7de865543fd39c02865200bcd5cc33d89c504090
     if id not in dev_list:
         return
     if dev_list[id] != None:
@@ -219,7 +195,6 @@ def fetch_motor_info():
                 else:
                     motor_info[key] = dev.read_motor_measurement()
                     motor_info[key].update(dev.read_imu_measurement())
-<<<<<<< HEAD
                     velocity = motor_info[key]["velocity"]
                     if velocity > 0.01:
                         subprocess.run("echo 1  > /tmp/{}_0".format(key), shell=True)
@@ -230,8 +205,6 @@ def fetch_motor_info():
                     else:
                         subprocess.run("echo 1  > /tmp/{}_0".format(key), shell=True)
                         subprocess.run("echo 1 > /tmp/{}_1".format(key), shell=True)
-=======
->>>>>>> 7de865543fd39c02865200bcd5cc33d89c504090
             except bluepy.btle.BTLEDisconnectError as e:
                 dev_list[key] = None
             except Exception as e:
@@ -283,11 +256,8 @@ api.add_resource(KMInit, '/api/init/<string:id>')
 ##    500: その他サーバーエラー
 api.add_resource(KMRotate, '/api/rotate/<string:id>/rad/<string:rad>')
 
-<<<<<<< HEAD
 api.add_resource(KMRotateSpeed, '/api/rotate_speed/<string:id>/speed/<string:speed>')
 
-=======
->>>>>>> 7de865543fd39c02865200bcd5cc33d89c504090
 ## モーターの位置を初期位置に戻す
 api.add_resource(KMRotateInitPos, '/api/rotate/init')
 ## モーター情報取得
@@ -327,7 +297,6 @@ class KMMotionPatternSave(Resource):
         subprocess.run("echo '{}' > {}".format(json.dumps(motion_patterns), motion_pattern_paths), shell=True)
         return {"result" : "ok", "pattern_id" : pattern_name}
 
-<<<<<<< HEAD
 class KMMotionPetternSaveSeq(Resource):
     def get(self):
         global motion_pattern
@@ -359,11 +328,6 @@ class KMMotionPatternPlay(KMPlayMotionResource):
     def get(self):
         global motion_pattern
         super().play(motion_pattern)
-=======
-class KMMotionPatternPlay(Resource):
-    def get(self):
-        #TODO 再生処理
->>>>>>> 7de865543fd39c02865200bcd5cc33d89c504090
         return {"result" : "ok"}
 
 class KMRegistoringMotionPattern(Resource):
@@ -373,10 +337,6 @@ class KMRegistoringMotionPattern(Resource):
 
 class KMMotionResource(Resource):
     def setPos(self, id, index, rad, speed):
-<<<<<<< HEAD
-=======
-        index = int(index)
->>>>>>> 7de865543fd39c02865200bcd5cc33d89c504090
         rad = float(rad)
         speed = float(speed)
         if index not in motion_pattern:
@@ -442,10 +402,7 @@ class KMMotionDelelte(Resource):
     def get(self, index):
         global motion_pattern
         if index not in motion_pattern:
-<<<<<<< HEAD
             print(motion_pattern)
-=======
->>>>>>> 7de865543fd39c02865200bcd5cc33d89c504090
             abort(404)
         motion_pattern.pop(index)
         return {"result" : "ok"}
@@ -455,35 +412,14 @@ class KMMotionPatterns(Resource):
         global motion_patterns
         return motion_patterns
 
-<<<<<<< HEAD
 class KMMotionPattern(KMPlayMotionResource):
-=======
-class KMMotionPattern(KMMovePosResource):
->>>>>>> 7de865543fd39c02865200bcd5cc33d89c504090
     def get(self, pattern_id):
         global motion_patterns
         if pattern_id not in motion_patterns:
             abort(404)
         motion_pattern = motion_patterns[pattern_id]
-<<<<<<< HEAD
         super().play(motion_pattern)
         return {"result": "ok"}
-=======
-        for motion in motion_pattern.values():
-            complete = {}
-            def allComplete(comp):
-                for flag in comp.values():
-                    if not flag:
-                        return False
-                return True
-            for key in dev_list:
-                complete[key] = False
-            while not allComplete(complete):
-                for key, value in motion.items():
-                    if not complete[key]:
-                        complete[key] = super().rotate(key, value["rad"], value["speed"])
-            time.sleep(5)
->>>>>>> 7de865543fd39c02865200bcd5cc33d89c504090
 
     def delete(self, pattern_id):
         global motion_patterns
@@ -491,7 +427,6 @@ class KMMotionPattern(KMMovePosResource):
             abort(404)
         motion_patterns.pop(pattern_id)
         subprocess.run("echo '{}' > {}".format(json.dumps(motion_patterns), motion_pattern_paths), shell=True)
-<<<<<<< HEAD
         return {"result": "ok"}
 
 # モーションパターン
@@ -502,15 +437,6 @@ api.add_resource(KMMotionPatternInit, '/api/motion_pattern/init')
 api.add_resource(KMMotionPatternSave, '/api/motion_pattern/save/<string:pattern_name>')
 ## モーションパターン登録完了（パターン名自動発行）
 api.add_resource(KMMotionPetternSaveSeq, '/api/motion_pattern/save')
-=======
-        return
-
-# モーションパターン
-## モーションパターン登録開始/削除
-api.add_resource(KMMotionPatternInit, '/api/motion_pattern/init')
-## モーションパターン登録完了
-api.add_resource(KMMotionPatternSave, '/api/motion_pattern/save/<string:pattern_name>')
->>>>>>> 7de865543fd39c02865200bcd5cc33d89c504090
 ## 登録中のモーションパターン再生
 api.add_resource(KMMotionPatternPlay, '/api/motion_pattern/play')
 ## 登録中のモーションパターンを取得
@@ -519,16 +445,10 @@ api.add_resource(KMRegistoringMotionPattern, '/api/motion_pattern/info')
 api.add_resource(KMMotionAdd, '/api/motion/<string:id>/index/<string:index>/rad/<string:rad>/speed/<string:speed>')
 ## モーション登録（現在のモーターの位置を使用）
 api.add_resource(KMMotionAddCurrentPos, '/api/motion/<string:index>/speed/<string:speed>')
-<<<<<<< HEAD
 ## モーション登録（現在のモーターの位置を使用、速度は固定）
 api.add_resource(KMMotionAddCurrentPosDefaultSpeed, '/api/motion/<string:index>')
 ## モーション登録削除
 api.add_resource(KMMotionDelelte, '/api/motion/delete/<string:index>')
-=======
-api.add_resource(KMMotionAddCurrentPosDefaultSpeed, '/api/motion/<string:index>')
-## モーション登録削除
-api.add_resource(KMMotionDelelte, '/api/motion/<string:id>')
->>>>>>> 7de865543fd39c02865200bcd5cc33d89c504090
 ## モーションパターン一覧表示
 api.add_resource(KMMotionPatterns, '/api/motion_patterns')
 ## モーションパターン再生／削除

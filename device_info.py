@@ -15,17 +15,10 @@ devices = {
     },
     "motor2" : {
         "name" : "KM-1S", 
-<<<<<<< HEAD
         "serial" : "RCC2#5C6",
         "mac" : "cb:b5:fc:05:07:e2",
         "speed" : 1.0,
         "ini_rad" : 1.00,
-=======
-        "serial" : "7WSC#E82",
-        "mac" : "c4:88:14:f4:e8:ad",
-        "speed" : 0.8,
-        "ini_rad" : 0.00,
->>>>>>> 7de865543fd39c02865200bcd5cc33d89c504090
         "min_rad" : 0.00,
         "max_rad" : 2.00,
         "remarks" : "joint"
